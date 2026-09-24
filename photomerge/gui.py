@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import threading
 
-from .merger import COMPRESSIONS, LAYOUTS, MAX_PHOTOS, MergeError, merge_photos
+from .merger import (
+    COMPRESSIONS, LAYOUTS, MAX_PHOTOS, MergeError, collect_images, merge_photos,
+)
 
 
 def run_gui() -> int:
@@ -23,7 +25,7 @@ def run_gui() -> int:
     layout = tk.StringVar(value="pages")
     columns = tk.StringVar(value="")
     spacing = tk.StringVar(value="0")
-    compression = tk.StringVar(value="tiff_lzw")
+    compression = tk.StringVar(value="deflate")
     status = tk.StringVar(value="Add photos to begin.")
 
     frame = ttk.Frame(root, padding=10)
@@ -46,11 +48,23 @@ def run_gui() -> int:
             filetypes=[("Images", "*.jpg *.jpeg *.png *.tif *.tiff *.bmp *.gif *.webp"),
                        ("All files", "*.*")],
         )
+        add_paths(list(chosen))
+
+    def add_paths(chosen):
         room = MAX_PHOTOS - len(files)
         if len(chosen) > room:
             messagebox.showwarning("Too many photos",
                                    f"Only {MAX_PHOTOS} photos allowed; extra ones were skipped.")
         files.extend(chosen[:room])
+        refresh()
+
+    def add_folder():
+        folder = filedialog.askdirectory(title="Choose a folder of photos")
+        if folder:
+            add_paths([str(p) for p in collect_images([folder])])
+
+    def clear():
+        files.clear()
         refresh()
 
     def remove():
@@ -71,7 +85,9 @@ def run_gui() -> int:
     buttons = ttk.Frame(frame)
     buttons.grid(row=1, column=0, columnspan=4, sticky="w", pady=6)
     ttk.Button(buttons, text="Add photos...", command=add).pack(side="left")
-    ttk.Button(buttons, text="Remove", command=remove).pack(side="left", padx=4)
+    ttk.Button(buttons, text="Add folder...", command=add_folder).pack(side="left", padx=4)
+    ttk.Button(buttons, text="Remove", command=remove).pack(side="left")
+    ttk.Button(buttons, text="Clear all", command=clear).pack(side="left", padx=4)
     ttk.Button(buttons, text="Move up", command=lambda: move(-1)).pack(side="left")
     ttk.Button(buttons, text="Move down", command=lambda: move(1)).pack(side="left", padx=4)
 
@@ -88,7 +104,15 @@ def run_gui() -> int:
 
     merge_btn = ttk.Button(frame, text="Merge to TIFF...")
     merge_btn.grid(row=6, column=0, columnspan=4, pady=8)
-    ttk.Label(frame, textvariable=status).grid(row=7, column=0, columnspan=4, sticky="w")
+    progress_bar = ttk.Progressbar(frame, mode="determinate")
+    progress_bar.grid(row=7, column=0, columnspan=4, sticky="ew")
+    ttk.Label(frame, textvariable=status).grid(row=8, column=0, columnspan=4, sticky="w")
+
+    def on_progress(done, total):
+        def update():
+            progress_bar.configure(maximum=total, value=done)
+            status.set(f"Merging photo {done} of {total}...")
+        root.after(0, update)
 
     def do_merge():
         if not files:
@@ -106,15 +130,17 @@ def run_gui() -> int:
             return
 
         merge_btn.state(["disabled"])
-        status.set("Merging... large photos can take a while.")
+        status.set("Checking photos... this can take a moment for large batches.")
+        progress_bar.configure(value=0)
 
         def work():
             try:
-                res = merge_photos(files, out, layout=layout.get(), columns=cols,
-                                   spacing=gap, compression=compression.get())
+                res = merge_photos(list(files), out, layout=layout.get(), columns=cols,
+                                   spacing=gap, compression=compression.get(),
+                                   progress=on_progress)
                 msg = f"Saved {res.output}"
                 root.after(0, lambda: messagebox.showinfo("Done", msg))
-            except (MergeError, OSError) as exc:
+            except Exception as exc:  # show any failure instead of dying silently
                 err = str(exc)
                 root.after(0, lambda: messagebox.showerror("Error", err))
             finally:

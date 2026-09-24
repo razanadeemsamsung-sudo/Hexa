@@ -28,10 +28,10 @@ jobs:
         run: python -m pytest -q
 
       - name: Build PhotoMerge.exe (GUI)
-        run: pyinstaller --noconfirm --onefile --windowed --name PhotoMerge --paths . packaging/photomerge_gui.py
+        run: pyinstaller --noconfirm --onefile --windowed --exclude-module imagecodecs --name PhotoMerge --paths . packaging/photomerge_gui.py
 
       - name: Build photomerge-cli.exe (command line)
-        run: pyinstaller --noconfirm --onefile --console --name photomerge-cli --paths . packaging/photomerge_cli.py
+        run: pyinstaller --noconfirm --onefile --console --exclude-module imagecodecs --name photomerge-cli --paths . packaging/photomerge_cli.py
 
       - name: Smoke-test the command-line EXE
         shell: pwsh
@@ -40,6 +40,16 @@ jobs:
           ./dist/photomerge-cli.exe smoke0.jpg smoke1.jpg smoke2.jpg -o smoke.tiff --layout grid
           if ($LASTEXITCODE -ne 0) { exit 1 }
           python -c "from PIL import Image; im = Image.open('smoke.tiff'); print(im.size); assert im.size == (600, 400)"
+
+      - name: Test the EXE with 2000 photos
+        shell: pwsh
+        run: |
+          python -c "import os; from PIL import Image; os.makedirs('many', exist_ok=True); [Image.new('RGB', (64, 48), (i % 256, i // 8 % 256, 90)).save(f'many/img{i}.jpg') for i in range(2000)]"
+          ./dist/photomerge-cli.exe many -o many_pages.tiff
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          ./dist/photomerge-cli.exe many -o many_grid.tiff --layout grid
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          python -c "from PIL import Image; im = Image.open('many_pages.tiff'); print(im.n_frames); assert im.n_frames == 2000; g = Image.open('many_grid.tiff'); print(g.size); assert g.size == (45 * 64, 45 * 48)"
 
       - name: Upload EXE files
         uses: actions/upload-artifact@v4

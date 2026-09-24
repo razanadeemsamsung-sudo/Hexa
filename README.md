@@ -1,6 +1,6 @@
 # PhotoMerge
 
-Merge **up to 30 photos into a single TIFF file** without reducing their resolution.
+Merge **up to 2000 photos into a single TIFF file** without reducing their resolution.
 Photos are never resized: every pixel of every photo ends up in the output, stored
 with lossless compression.
 
@@ -21,8 +21,8 @@ To build locally on Windows:
 
 ```bat
 pip install -r requirements.txt pyinstaller
-pyinstaller --onefile --windowed --name PhotoMerge --paths . packaging\photomerge_gui.py
-pyinstaller --onefile --console --name photomerge-cli --paths . packaging\photomerge_cli.py
+pyinstaller --onefile --windowed --exclude-module imagecodecs --name PhotoMerge --paths . packaging\photomerge_gui.py
+pyinstaller --onefile --console --exclude-module imagecodecs --name photomerge-cli --paths . packaging\photomerge_cli.py
 ```
 
 The executables appear in `dist\`.
@@ -30,12 +30,12 @@ The executables appear in `dist\`.
 ## Install (Python)
 
 ```bash
-pip install -r requirements.txt      # just Pillow
+pip install -r requirements.txt      # Pillow, numpy, tifffile
 # or install the `photomerge` command:
 pip install .
 ```
 
-Python 3.9+ is required. The optional GUI uses Tkinter, which ships with most
+Python 3.10+ is required. The optional GUI uses Tkinter, which ships with most
 Python installers (on Debian/Ubuntu: `sudo apt install python3-tk`).
 
 ## Usage
@@ -64,7 +64,7 @@ python -m photomerge a.jpg b.jpg c.jpg -o strip.tiff --layout vertical
 | `-c, --columns` | Columns for `grid` (default: square-ish) |
 | `-s, --spacing` | Gap in pixels between photos in stitched layouts |
 | `-b, --background` | Colour of gaps / empty space, e.g. `white`, `black`, `#202020` |
-| `--compression` | `tiff_lzw` (default), `tiff_adobe_deflate`, or `raw` — all lossless |
+| `--compression` | `deflate` (default, lossless) or `none` |
 | `--dpi` | DPI to record in the file (default: highest DPI among the photos) |
 | `--gui` | Open the graphical interface |
 
@@ -91,19 +91,36 @@ print(result.size)
   page at its original size. In stitched modes the canvas grows to fit the photos
   (each grid cell is as large as the biggest photo in its row/column) and photos are
   pasted 1:1, centred in their cell.
-* **Lossless output.** LZW/Deflate compression or raw storage — no JPEG re-encoding.
+* **Lossless output.** Deflate compression or uncompressed storage — no JPEG re-encoding.
 * **Correct orientation.** EXIF rotation from phone/camera photos is applied by
   rotating pixels (not resampling).
-* **Metadata.** DPI is preserved; in `pages` mode the first photo's ICC colour profile
-  is embedded.
+* **Metadata.** DPI is preserved; in `pages` mode every page keeps its own ICC colour
+  profile.
 * **Huge outputs.** If the result would exceed the 4 GB limit of classic TIFF, a
-  BigTIFF file is written automatically (uncompressed, since Pillow only supports
-  BigTIFF without compression).
+  BigTIFF file is written automatically (still compressed).
 
 Supported inputs: JPEG, PNG, TIFF, BMP, GIF, WebP.
 
-Memory note: stitched layouts hold the full canvas in RAM. 30 × 24-megapixel photos
-in a grid is about 2.2 GB of pixels, so use `pages` mode on low-memory machines.
+## Large batches (hundreds or thousands of photos)
+
+Photos are loaded one at a time, so RAM use stays small (tens of MB plus one photo)
+even for 2000 photos. All photos are checked before writing starts, so a broken file
+is reported immediately instead of at the end.
+
+* **`pages` layout** streams each photo straight into the TIFF, so it needs no extra
+  disk space beyond the output file.
+* **Stitched layouts** build the big image in a temporary scratch file next to the
+  output (deleted afterwards). It needs free disk space equal to the uncompressed
+  image: width × height × 3 bytes. For example, 2000 photos of 12 MP in a grid need
+  roughly 72 GB. The tool checks this before starting and tells you if space is short.
+
+Measured on a 4-core Linux machine with 2000 photos of 1200 × 900 px:
+`pages` took 70 s and `grid` (a 54000 × 40500 px image) took 83 s, both using under
+100 MB of RAM.
+
+Note that very large single images (tens of gigapixels) can only be opened by viewers
+that support BigTIFF, such as GIMP, QGIS, or libvips-based tools. The Windows Photos app
+cannot open them.
 
 ## Tests
 

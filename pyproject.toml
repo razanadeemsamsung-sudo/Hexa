@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "photomerge"
-version = "1.0.0"
-description = "Merge up to 30 photos into a single TIFF without reducing resolution"
+version = "2.0.0"
+description = "Merge up to 2000 photos into a single TIFF without reducing resolution"
 readme = "README.md"
-requires-python = ">=3.9"
-dependencies = ["Pillow>=10.0"]
+requires-python = ">=3.10"
+dependencies = ["Pillow>=10.0", "numpy>=1.23", "tifffile>=2023.7.10"]
 
 [project.optional-dependencies]
 test = ["pytest"]

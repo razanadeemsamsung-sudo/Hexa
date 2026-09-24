@@ -27,8 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-s", "--spacing", type=int, default=0, help="gap in pixels between photos")
     p.add_argument("-b", "--background", default="white", help="background colour for gaps")
     p.add_argument(
-        "--compression", choices=COMPRESSIONS, default="tiff_lzw",
-        help="lossless compression to use (default: tiff_lzw)",
+        "--compression", choices=COMPRESSIONS, default="deflate",
+        help="lossless compression to use (default: deflate)",
     )
     p.add_argument("--dpi", type=float, help="DPI to store in the file (default: from photos)")
     p.add_argument("--gui", action="store_true", help="open the graphical interface")
@@ -45,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_gui()
 
+    def show_progress(done: int, total: int) -> None:
+        if sys.stderr is not None:
+            end = "\n" if done == total else ""
+            print(f"\rMerging photo {done}/{total}", end=end, file=sys.stderr, flush=True)
+
     try:
         result = merge_photos(
             args.inputs,
@@ -55,9 +60,10 @@ def main(argv: list[str] | None = None) -> int:
             background=args.background,
             compression=args.compression,
             dpi=(args.dpi, args.dpi) if args.dpi else None,
+            progress=show_progress,
         )
-    except MergeError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+    except (MergeError, OSError) as exc:
+        print(f"\nError: {exc}", file=sys.stderr)
         return 1
 
     detail = (

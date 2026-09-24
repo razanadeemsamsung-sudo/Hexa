@@ -65,12 +65,18 @@ def test_grid_pastes_photos_unscaled(tmp_path):
 
 def test_limit_of_thirty(tmp_path):
     paths = []
+    tiny = Image.new("RGB", (4, 4), "red")
     for i in range(MAX_PHOTOS + 1):
-        p = tmp_path / f"p{i:02}.png"
-        make_photo(p, (4, 4), i)
+        p = tmp_path / f"p{i:04}.png"
+        tiny.save(p)
         paths.append(p)
-    merge_photos(paths[:MAX_PHOTOS], tmp_path / "ok.tiff")
-    with pytest.raises(MergeError, match="At most 30"):
+    calls = []
+    res = merge_photos(paths[:MAX_PHOTOS], tmp_path / "ok.tiff",
+                       progress=lambda done, total: calls.append((done, total)))
+    assert calls[-1] == (MAX_PHOTOS, MAX_PHOTOS)
+    with Image.open(res.output) as tif:
+        assert tif.n_frames == MAX_PHOTOS
+    with pytest.raises(MergeError, match=f"At most {MAX_PHOTOS}"):
         merge_photos(paths, tmp_path / "too_many.tiff")
 
 
@@ -107,3 +113,53 @@ def test_bigtiff_used_for_huge_output(tmp_path, monkeypatch):
         assert res.output.read_bytes()[:4] == b"II+\x00"
         with Image.open(res.output) as tif:
             assert tif.size in ((8, 8), (16, 8))
+
+
+@pytest.mark.parametrize("compression", ["deflate", "none"])
+def test_canvas_compressions_are_lossless(tmp_path, compression):
+    originals, paths = [], []
+    for i, size in enumerate([(30, 20), (25, 40), (10, 10)]):
+        p = tmp_path / f"p{i}.png"
+        originals.append(make_photo(p, size, i))
+        paths.append(p)
+    res = merge_photos(paths, tmp_path / "c.tiff", layout="horizontal",
+                       background="black", compression=compression)
+    with Image.open(res.output) as tif:
+        assert tif.size == (65, 40)
+        # second photo fills its whole cell height, starting at x=30
+        assert tif.crop((30, 0, 55, 40)).tobytes() == originals[1].tobytes()
+        # empty space under the first photo is background
+        assert tif.getpixel((0, 39)) == (0, 0, 0)
+    assert not list(tmp_path.glob(".photomerge-*")), "scratch files left behind"
+
+
+def test_folder_uses_natural_order(tmp_path):
+    folder = tmp_path / "photos"
+    folder.mkdir()
+    for n, colour in [(10, "blue"), (2, "red"), (1, "green")]:
+        Image.new("RGB", (2, 2), colour).save(folder / f"img{n}.png")
+    res = merge_photos([folder], tmp_path / "o.tiff", layout="horizontal")
+    with Image.open(res.output) as tif:
+        assert [tif.getpixel((x, 0)) for x in (0, 2, 4)] == [
+            (0, 128, 0), (255, 0, 0), (0, 0, 255)]
+
+
+def test_exif_rotation_applied(tmp_path):
+    img = Image.new("RGB", (40, 20), "red")
+    exif = Image.Exif()
+    exif[0x0112] = 6  # rotate 90 degrees
+    img.save(tmp_path / "r.jpg", exif=exif)
+    res = merge_photos([tmp_path / "r.jpg"], tmp_path / "r.tiff", layout="grid")
+    assert res.size == (20, 40)
+
+
+def test_disk_space_checked_before_stitching(tmp_path, monkeypatch):
+    import collections
+    import photomerge.merger as merger
+
+    usage = collections.namedtuple("usage", "total used free")
+    monkeypatch.setattr(merger.shutil, "disk_usage", lambda _: usage(10, 10, 10))
+    p = tmp_path / "p.png"
+    make_photo(p, (8, 8), 0)
+    with pytest.raises(MergeError, match="Not enough free disk space"):
+        merge_photos([p, p], tmp_path / "x.tiff", layout="grid")
