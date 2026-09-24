@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "photomerge"
+version = "1.0.0"
+description = "Merge up to 30 photos into a single TIFF without reducing resolution"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["Pillow>=10.0"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+photomerge = "photomerge.cli:main"
+
+[tool.setuptools]
+packages = ["photomerge"]
