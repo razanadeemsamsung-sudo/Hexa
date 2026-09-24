@@ -1,0 +1,58 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller pytest
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Build PhotoMerge.exe (GUI)
+        run: pyinstaller --noconfirm --onefile --windowed --name PhotoMerge --paths . packaging/photomerge_gui.py
+
+      - name: Build photomerge-cli.exe (command line)
+        run: pyinstaller --noconfirm --onefile --console --name photomerge-cli --paths . packaging/photomerge_cli.py
+
+      - name: Smoke-test the command-line EXE
+        shell: pwsh
+        run: |
+          python -c "from PIL import Image; [Image.new('RGB', (300, 200), c).save(f'smoke{i}.jpg') for i, c in enumerate(['red', 'green', 'blue'])]"
+          ./dist/photomerge-cli.exe smoke0.jpg smoke1.jpg smoke2.jpg -o smoke.tiff --layout grid
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          python -c "from PIL import Image; im = Image.open('smoke.tiff'); print(im.size); assert im.size == (600, 400)"
+
+      - name: Upload EXE files
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoMerge-windows
+          path: |
+            dist/PhotoMerge.exe
+            dist/photomerge-cli.exe
+
+      - name: Publish release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/PhotoMerge.exe
+            dist/photomerge-cli.exe

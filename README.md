@@ -4,7 +4,30 @@ Merge **up to 30 photos into a single TIFF file** without reducing their resolut
 Photos are never resized: every pixel of every photo ends up in the output, stored
 with lossless compression.
 
-## Install
+## Windows .exe (no Python needed)
+
+Every push is built into Windows executables by GitHub Actions
+(`.github/workflows/build-exe.yml`):
+
+* **`PhotoMerge.exe`** – double-click to open the graphical app.
+* **`photomerge-cli.exe`** – the same command-line options as below, e.g.
+  `photomerge-cli.exe C:\Photos -o merged.tiff --layout grid`.
+
+Download them from the repository's **Actions** tab → latest *Build Windows EXE* run →
+**Artifacts → PhotoMerge-windows** (a zip). Pushing a tag such as `v1.0.0` also
+attaches both files to a GitHub Release.
+
+To build locally on Windows:
+
+```bat
+pip install -r requirements.txt pyinstaller
+pyinstaller --onefile --windowed --name PhotoMerge --paths . packaging\photomerge_gui.py
+pyinstaller --onefile --console --name photomerge-cli --paths . packaging\photomerge_cli.py
+```
+
+The executables appear in `dist\`.
+
+## Install (Python)
 
 ```bash
 pip install -r requirements.txt      # just Pillow
