@@ -13,9 +13,12 @@ Every push is built into Windows executables by GitHub Actions
 * **`photomerge-cli.exe`** – the same command-line options as below, e.g.
   `photomerge-cli.exe C:\Photos -o merged.tiff --layout grid`.
 
-Download them from the repository's **Actions** tab → latest *Build Windows EXE* run →
-**Artifacts → PhotoMerge-windows** (a zip). Pushing a tag such as `v1.0.0` also
-attaches both files to a GitHub Release.
+Download the newest build directly:
+
+* https://github.com/razanadeemsamsung-sudo/Hexa/releases/latest/download/PhotoMerge.exe
+* https://github.com/razanadeemsamsung-sudo/Hexa/releases/latest/download/photomerge-cli.exe
+
+or browse all builds on the repository's **Releases** page.
 
 To build locally on Windows:
 
